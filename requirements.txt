@@ -1,0 +1,2 @@
+pytoniq @ git+https://github.com/yungwine/pytoniq@1380ae5a001c3074e35b06fbb6e5eb20f337c9a6
+pytoniq-core==0.1.19
