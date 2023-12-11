@@ -7,7 +7,6 @@ from pytoniq import WalletV4R2, WalletV3R2, WalletV3R1, Address
 from pytoniq import begin_cell, Cell
 from pytoniq.contract.utils import generate_query_id
 from pytoniq_core.crypto.keys import mnemonic_new, mnemonic_is_valid
-from config import *
 
 
 logging.basicConfig(filename=None,  # path to log file, None -> console
@@ -80,12 +79,13 @@ async def main():
             successfull_txs += 4
             logging.info(f"{i} successful transfer ({successfull_txs} transactions)")
     
-    res = await send_wait_transaction(wallet, recipient_address, FORWARD_TON_AMOUTN, payload, total_transactions % 4)
-    if not res:
-        logging.error(f"Failed to send tansfer №{total_transactions // 4 + 1}")
-    else:
-        successfull_txs += total_transactions % 4
-        logging.info(f"{total_transactions // 4 + 1} successful transfer ({successfull_txs} transactions)")
+    if total_transactions % 4 != 0:
+        res = await send_wait_transaction(wallet, recipient_address, FORWARD_TON_AMOUTN, payload, total_transactions % 4)
+        if not res:
+            logging.error(f"Failed to send tansfer №{total_transactions // 4 + 1}")
+        else:
+            successfull_txs += total_transactions % 4
+            logging.info(f"{total_transactions // 4 + 1} successful transfer ({successfull_txs} transactions)")
 
     spent_time = int(time.time()) - start_time
 
