@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 
+import requests
 from pytoniq import LiteBalancer
 from pytoniq import WalletV4R2, Address
 from pytoniq import begin_cell, Cell
@@ -23,7 +24,7 @@ logging.getLogger("LiteClient").setLevel(logging.WARNING)
 TRANSACTION_COST = 0.0035
 FORWARD_TON_AMOUTN = 0
 RECIPIENT_ADDRESS = Address("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c")
-
+CONFIG_URL = 'https://ton.org/global-config.json'
 
 async def main():
     tick = input("enter tick (nano, gram, bolt etc.): ")
@@ -44,7 +45,8 @@ async def main():
         logging.error("Invalid seed phrase")
         exit(-1)
 
-    client = LiteBalancer.from_mainnet_config(trust_level=1)
+    config = requests.get(CONFIG_URL).json()
+    client = LiteBalancer.from_config(config, trust_level=1)
     await client.start_up()
     wallet = await HighloadWallet.from_mnemonic(client, wallet_mnemonic)
     wallet_balance = await wallet.get_balance()
