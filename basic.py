@@ -3,9 +3,8 @@ import logging
 import time
 
 from pytoniq import LiteBalancer
-from pytoniq import WalletV4R2, Address
+from pytoniq import WalletV4R2, WalletV3R2, WalletV3R1, Address
 from pytoniq import begin_cell, Cell
-from pytoniq.contract.wallets.highload import HighloadWallet
 from pytoniq.contract.utils import generate_query_id
 from pytoniq_core.crypto.keys import mnemonic_new, mnemonic_is_valid
 from config import *
@@ -21,10 +20,9 @@ logging.getLogger("LiteBalancer").setLevel(logging.WARNING)
 logging.getLogger("LiteClient").setLevel(logging.WARNING)
 
 
-TRANSACTION_COST = 0.0035
+TRANSACTION_COST = 0.006
 FORWARD_TON_AMOUTN = 0
-BURN_ADDRESS = Address("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c")
-
+WALLET_TYPE = WalletV4R2  # you can replace it with WalletV3R1 or WalletV3R2
 
 async def main():
     tick = input("enter tick (nano, gram, bolt etc.): ")
@@ -40,17 +38,18 @@ async def main():
     print()
     if not wallet_mnemonic:
         wallet_mnemonic = mnemonic_new()
-        logging.warning(f'Your new wallet mnemonic is: {" ".join(wallet_mnemonic)}')
+        logging.warning(f'Your new wallet mnemonic is: {" ".join(wallet_mnemonic)}\n')
     elif not mnemonic_is_valid(wallet_mnemonic):
         logging.error("Invalid seed phrase")
         exit(-1)
 
     client = LiteBalancer.from_mainnet_config(trust_level=1)
     await client.start_up()
-    wallet = await HighloadWallet.from_mnemonic(client, wallet_mnemonic)
+    wallet = await WALLET_TYPE.from_mnemonic(client, wallet_mnemonic)
     wallet_balance = await wallet.get_balance()
-    
-    logging.info(f"Your highload wallet address: {wallet.address.to_str(is_bounceable=False)}")
+    recipient_address = wallet.address
+
+    logging.info(f"Your v4r2 wallet address: {wallet.address.to_str(is_bounceable=False)}")
     logging.info(f"Balance: {wallet_balance / 10 ** 9}")
 
     all_fees = (total_transactions * TRANSACTION_COST + 0.017) * 10 ** 9
@@ -73,20 +72,20 @@ async def main():
     start_time = int(time.time())
 
     successfull_txs = 0
-    for i in range(total_transactions // 254):
-        res = await send_wait_transaction(wallet, BURN_ADDRESS, FORWARD_TON_AMOUTN, payload, 254)
+    for i in range(total_transactions // 4):
+        res = await send_wait_transaction(wallet, recipient_address, FORWARD_TON_AMOUTN, payload, 4)
         if not res:
             logging.error(f"Failed to send tansfer №{i}")
         else:
-            successfull_txs += 254
+            successfull_txs += 4
             logging.info(f"{i} successful transfer ({successfull_txs} transactions)")
     
-    res = await send_wait_transaction(wallet, BURN_ADDRESS, FORWARD_TON_AMOUTN, payload, total_transactions % 254)
+    res = await send_wait_transaction(wallet, recipient_address, FORWARD_TON_AMOUTN, payload, total_transactions % 4)
     if not res:
-        logging.error(f"Failed to send tansfer №{total_transactions // 254 + 1}")
+        logging.error(f"Failed to send tansfer №{total_transactions // 4 + 1}")
     else:
-        successfull_txs += total_transactions % 254
-        logging.info(f"{total_transactions // 254 + 1} successful transfer ({successfull_txs} transactions)")
+        successfull_txs += total_transactions % 4
+        logging.info(f"{total_transactions // 4 + 1} successful transfer ({successfull_txs} transactions)")
 
     spent_time = int(time.time()) - start_time
 
@@ -96,12 +95,12 @@ async def main():
     
 
 
-async def check_deployed(wallet: HighloadWallet):
+async def check_deployed(wallet: WALLET_TYPE):
     account_state = await wallet.get_account_state()
     if account_state.state.type_ == "uninitialized":
         balance = await wallet.get_balance()
-        if balance < 0.006 * 10 ** 9:
-            logging.error("Can't deploy wallet: need at least 0.006 TON on balance")
+        if balance < 0.02 * 10 ** 9:
+            logging.error("Can't deploy wallet: need at least 0.02 TON on balance")
             return False
         logging.warning("Wallet is not initialized, trying to deploy wallet")
         for i in range(3):
@@ -119,19 +118,20 @@ async def check_deployed(wallet: HighloadWallet):
     return True
 
 
-async def send_wait_transaction(wallet: HighloadWallet, address: Address | str, 
-                                send_amount: int, payload: Cell, msg_count: int = 254):
+async def send_wait_transaction(wallet: WALLET_TYPE, address: Address | str, 
+                                send_amount: int, payload: Cell, msg_count: int = 4):
     msgs = []
     for _ in range(msg_count):
         msgs.append(wallet.create_wallet_internal_message(address, 3, send_amount, payload))
-    query_id = generate_query_id()
-    await wallet.raw_transfer(msgs, query_id=query_id)
+    
+    prev_seqno = await wallet.get_seqno()
+    await wallet.raw_transfer(msgs)
 
-    for _ in range(6 * 5):  # wait 5 minutes for transaction
-        is_processed = await wallet.processed(query_id)
-        if is_processed:
+    for _ in range(60):  # wait 5 minutes for transaction
+        new_seqno = await wallet.get_seqno()
+        if new_seqno != prev_seqno:
             return True
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
 
     return False
 
