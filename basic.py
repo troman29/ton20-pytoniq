@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 import time
 
+import requests
 from pytoniq import LiteBalancer
 from pytoniq import WalletV4R2, WalletV3R2, WalletV3R1, Address
 from pytoniq import begin_cell, Cell
@@ -22,6 +24,7 @@ logging.getLogger("LiteClient").setLevel(logging.WARNING)
 TRANSACTION_COST = 0.006
 FORWARD_TON_AMOUTN = 0
 WALLET_TYPE = WalletV4R2  # you can replace it with WalletV3R1 or WalletV3R2
+CONFIG_URL = 'https://ton.org/global-config.json'
 
 async def main():
     tick = input("enter tick (nano, gram, bolt etc.): ")
@@ -45,9 +48,11 @@ async def main():
     start_time = int(time.time())
     successfull_txs = 0
 
+    config = requests.get(CONFIG_URL).json()
+
     while True:
         try:
-            client = LiteBalancer.from_mainnet_config(trust_level=1)
+            client = LiteBalancer.from_config(config, trust_level=1)
             await client.start_up()
             wallet = await WALLET_TYPE.from_mnemonic(client, wallet_mnemonic)
             wallet_balance = await wallet.get_balance()
