@@ -42,57 +42,63 @@ async def main():
         logging.error("Invalid seed phrase")
         exit(-1)
 
-    client = LiteBalancer.from_mainnet_config(trust_level=1)
-    await client.start_up()
-    wallet = await WALLET_TYPE.from_mnemonic(client, wallet_mnemonic)
-    wallet_balance = await wallet.get_balance()
-    recipient_address = wallet.address
-
-    logging.info(f"Your v4r2 wallet address: {wallet.address.to_str(is_bounceable=False)}")
-    logging.info(f"Balance: {wallet_balance / 10 ** 9}")
-
-    all_fees = (total_transactions * TRANSACTION_COST + 0.017) * 10 ** 9
-    if wallet_balance < all_fees:
-        input("your balance is insufficient, press enter after you top up your wallet"
-              f" (need minimum {all_fees / 10 ** 9} TON) ")
-        try:
-            await client.get_time()
-        except Exception:
-            await client.start_up()
-    
-    wallet_balance = await wallet.get_balance()
-    if wallet_balance < all_fees:
-        logging.error(f"Still insufficient balance ({wallet_balance / 10 ** 9} < {all_fees / 10 ** 9}) :(")
-        exit(-1)
-
-    if not (await check_deployed(wallet)):
-        exit(-1)
-
     start_time = int(time.time())
-
     successfull_txs = 0
-    for i in range(total_transactions // 4):
-        res = await send_wait_transaction(wallet, recipient_address, FORWARD_TON_AMOUTN, payload, 4)
-        if not res:
-            logging.error(f"Failed to send tansfer №{i}")
-        else:
-            successfull_txs += 4
-            logging.info(f"{i} successful transfer ({successfull_txs} transactions)")
-    
-    if total_transactions % 4 != 0:
-        res = await send_wait_transaction(wallet, recipient_address, FORWARD_TON_AMOUTN, payload, total_transactions % 4)
-        if not res:
-            logging.error(f"Failed to send tansfer №{total_transactions // 4 + 1}")
-        else:
-            successfull_txs += total_transactions % 4
-            logging.info(f"{total_transactions // 4 + 1} successful transfer ({successfull_txs} transactions)")
 
-    spent_time = int(time.time()) - start_time
+    while True:
+        try:
+            client = LiteBalancer.from_mainnet_config(trust_level=1)
+            await client.start_up()
+            wallet = await WALLET_TYPE.from_mnemonic(client, wallet_mnemonic)
+            wallet_balance = await wallet.get_balance()
+            recipient_address = wallet.address
 
-    await client.close_all()
-    logging.info(f"total successfull transactions: {successfull_txs}\n"
-                 f"time spent: {spent_time // 3600 :02d}:{(spent_time % 3600) // 60:02d}:{(spent_time % 60):02d}")
-    
+            logging.info(f"Your v4r2 wallet address: {wallet.address.to_str(is_bounceable=False)}")
+            logging.info(f"Balance: {wallet_balance / 10 ** 9}")
+
+            all_fees = (total_transactions * TRANSACTION_COST + 0.017) * 10 ** 9
+            if wallet_balance < all_fees:
+                input("your balance is insufficient, press enter after you top up your wallet"
+                    f" (need minimum {all_fees / 10 ** 9} TON) ")
+                try:
+                    await client.get_time()
+                except Exception:
+                    await client.start_up()
+            
+            wallet_balance = await wallet.get_balance()
+            if wallet_balance < all_fees:
+                logging.error(f"Still insufficient balance ({wallet_balance / 10 ** 9} < {all_fees / 10 ** 9}) :(")
+                exit(-1)
+
+            if not (await check_deployed(wallet)):
+                exit(-1)
+
+            # start_time = int(time.time())
+
+            for i in range((total_transactions - successfull_txs) // 4):
+                res = await send_wait_transaction(wallet, recipient_address, FORWARD_TON_AMOUTN, payload, 4)
+                if not res:
+                    logging.error(f"Failed to send tansfer №{i}")
+                else:
+                    successfull_txs += 4
+                    logging.info(f"{i} successful transfer ({successfull_txs} transactions)")
+            
+            if total_transactions % 4 != 0 and total_transaction - 4 > successfull_txs:
+                res = await send_wait_transaction(wallet, recipient_address, FORWARD_TON_AMOUTN, payload, total_transactions % 4)
+                if not res:
+                    logging.error(f"Failed to send tansfer №{total_transactions // 4 + 1}")
+                else:
+                    successfull_txs += total_transactions % 4
+                    logging.info(f"{total_transactions // 4 + 1} successful transfer ({successfull_txs} transactions)")
+
+            spent_time = int(time.time()) - start_time
+
+            await client.close_all()
+            logging.info(f"total successfull transactions: {successfull_txs}\n"
+                        f"time spent: {spent_time // 3600 :02d}:{(spent_time % 3600) // 60:02d}:{(spent_time % 60):02d}")
+
+        except:
+            pass            
 
 
 async def check_deployed(wallet: WALLET_TYPE):
